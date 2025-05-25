@@ -1,4 +1,5 @@
-from typing import Optional, Union
+from typing import Optional, Union, List
+
 
 class Metadata:
     def __init__(self, type: str, difficulty: str, points: Optional[str] = None):
@@ -13,27 +14,29 @@ class Metadata:
             "points": self.points
         }
 
+
 class Question:
     def __init__(
         self,
         stem: str,
         answer: Union[int, str, None],
-        choices_text: Optional[str] = None,
+        choices: Optional[List[str]] = None,  # choices만 유지
         explanation: Optional[str] = None,
         conditions: Optional[str] = None,
         metadata: Optional[Metadata] = None
     ):
         self.stem = stem
-        self.choices_text = choices_text
+        self.choices = choices
         self.answer = answer
         self.explanation = explanation
         self.conditions = conditions
-        self.metadata = metadata or Metadata(type="etc", difficulty="중", points=None)
+        self.metadata = metadata or Metadata(
+            type="etc", difficulty="중", points=None)
 
     def to_dict(self):
         return {
             "stem": self.stem,
-            "choices_text": self.choices_text,
+            "choices": self.choices,  # choices만 반환
             "answer": self.answer,
             "explanation": self.explanation,
             "conditions": self.conditions,

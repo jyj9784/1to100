@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ title }}</title>
+  <style>
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      margin: 50px 60px;
+      padding: 0;
+      font-size: 15px;
+      line-height: 1.9;
+      color: #fff;
+      background-color: #000;
+    }
+    h1 {
+      text-align: center;
+      font-size: 20px;
+      margin-bottom: 40px;
+    }
+    .content {
+      column-count: 2;
+      column-gap: 60px;
+    }
+    .paragraph-box {
+      border: 1px solid #888;
+      padding: 20px;
+      margin-bottom: 40px;
+      break-inside: avoid;
+      background-color: #111;
+    }
+    .paragraph {
+      margin: 0;
+      text-align: justify;
+    }
+    .question-block {
+      break-inside: avoid;
+      margin-bottom: 30px;
+      text-align: justify;
+    }
+    .question-block strong {
+      font-weight: bold;
+      display: inline-block;
+      margin-bottom: 5px;
+    }
+    .choice {
+      display: block;
+      text-indent: -1.5em;
+      padding-left: 1.5em;
+    }
+  </style>
+</head>
+<body>
+  <h1>{{ title }}</h1>
+  <div class="content">
+    {% for para in paragraphs %}
+      <div class="paragraph-box">
+        <div class="paragraph">
+          {{ para.replace('\n', '<br>')|safe }}
+        </div>
+      </div>
+    {% endfor %}
+
+    {% for q in questions %}
+      <div class="question-block">
+        {% set lines = q.question.split('\n') %}
+        {% if lines|length > 1 %}
+          <strong>{{ lines[0] }}</strong>
+          {% for line in lines[1:] %}
+            {% if line.strip().startswith('①') or line.strip().startswith('②') or line.strip().startswith('③') or line.strip().startswith('④') or line.strip().startswith('⑤') %}
+              <span class="choice">{{ line }}</span>
+            {% else %}
+              <p>{{ line }}</p>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          <p>{{ q.question }}</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</body>
+</html>
