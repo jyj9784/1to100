@@ -5,6 +5,26 @@ from model.question import Question, Metadata
 from model.passage import Passage
 
 
+def is_question_start(text: str) -> bool:
+    """질문 번호 패턴 인식"""
+    pattern = r"^(?:\(\d+\)|\d+\s*[.)])"
+    return bool(re.match(pattern, text))
+
+
+def should_skip_line(text: str) -> bool:
+    """문제지 하단 부가 문구 등 무시"""
+    skip_patterns = [
+        r"이 문제지에 관한 저작권", r"^\d+\s*(?:홀수형|짝수형)?$",
+    ]
+    return any(re.search(p, text) for p in skip_patterns)
+
+
+def is_passage_intro(text: str) -> bool:
+    """새로운 지문 안내 문구 인식"""
+    pattern = r"^(?:\[[^\]]+\]\s*)?다음\s*"
+    return bool(re.match(pattern, text)) and "중" not in text[:5]
+
+
 def classify_question_type(text: str) -> str:
     text = text.replace("\n", " ")
     if re.search(r">\s*정답", text):
@@ -32,16 +52,40 @@ def extract_choices(block_lines: List[str]) -> List[str]:
     return [m.strip() for m in matches]
 
 
+def extract_answer(block_lines: List[str]) -> Tuple[List[str], str | None]:
+    """블록에서 정답 표기를 찾아 제거 후 반환"""
+    answer_pattern = re.compile(r"정답[:：]?\s*([①-⑤OX])")
+    answer = None
+    cleaned = []
+    for line in block_lines:
+        m = answer_pattern.search(line)
+        if m:
+            answer = m.group(1)
+            line = answer_pattern.sub("", line).strip()
+            if line:
+                cleaned.append(line)
+        else:
+            cleaned.append(line)
+    return cleaned, answer
+
+
 def parse_passage_and_questions(text: str) -> Tuple[Passage, List[Question]]:
     lines = text.splitlines()
-    passage_lines = []
-    question_blocks = []
-    current_block = []
+    passage_lines: List[str] = []
+    question_blocks: List[List[str]] = []
+    current_block: List[str] = []
     is_question_section = False
 
     for line in lines:
         stripped = line.strip()
-        if not stripped:
+        if not stripped or should_skip_line(stripped):
+            continue
+
+        if is_question_section and is_passage_intro(stripped):
+            if current_block:
+                question_blocks.append(current_block)
+                current_block = []
+            current_block.append(stripped)
             continue
 
         # 지문과 문제 구분 조건
@@ -50,7 +94,7 @@ def parse_passage_and_questions(text: str) -> Tuple[Passage, List[Question]]:
 
         if is_question_section:
             # 새로운 문제 번호 인식 패턴 강화
-            if re.match(r"^\d+\.\s*", stripped):
+            if is_question_start(stripped):
                 if current_block:
                     question_blocks.append(current_block)
                 current_block = [stripped]
@@ -73,6 +117,7 @@ def parse_passage_and_questions(text: str) -> Tuple[Passage, List[Question]]:
         q_type = classify_question_type(full_text)
         metadata = Metadata(type=q_type, difficulty="중", points=None)
 
+        block, answer = extract_answer(block)
         choices = extract_choices(block)
 
         # 보기 있는 경우: 보기 앞까지를 stem으로 간주
@@ -87,7 +132,7 @@ def parse_passage_and_questions(text: str) -> Tuple[Passage, List[Question]]:
         question = Question(
             stem=stem_only,
             choices=choices if choices else None,
-            answer=None,
+            answer=answer,
             explanation=None,
             conditions=None,
             metadata=metadata
