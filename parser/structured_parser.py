@@ -21,6 +21,15 @@ def should_skip_line(text: str) -> bool:
     return any(re.search(p, text) for p in skip_patterns)
 
 
+
+def is_passage_intro(text: str) -> bool:
+    """새로운 지문 안내 문구 인식"""
+    if text.startswith("다음 ") and "중" not in text[:5]:
+        return True
+    return False
+
+
+
 def classify_question_type(text: str) -> str:
     text = text.replace("\n", " ")
     if re.search(r">\s*정답", text):
@@ -58,6 +67,15 @@ def parse_passage_and_questions(text: str) -> Tuple[Passage, List[Question]]:
     for line in lines:
         stripped = line.strip()
         if not stripped or should_skip_line(stripped):
+
+            continue
+
+        if is_question_section and is_passage_intro(stripped):
+            if current_block:
+                question_blocks.append(current_block)
+                current_block = []
+            current_block.append(stripped)
+            
             continue
 
         # 지문과 문제 구분 조건
