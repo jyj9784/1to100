@@ -7,10 +7,8 @@ from model.passage import Passage
 
 def is_question_start(text: str) -> bool:
     """질문 번호 패턴 인식"""
-    return bool(
-        re.match(r"^(\d+)[.)]", text)
-        or re.match(r"^\(\d+\)", text)
-    )
+    pattern = r"^(?:\(\d+\)|\d+\s*[.)])"
+    return bool(re.match(pattern, text))
 
 
 def should_skip_line(text: str) -> bool:
@@ -21,10 +19,27 @@ def should_skip_line(text: str) -> bool:
     return any(re.search(p, text) for p in skip_patterns)
 
 
+    pattern = r"^(?:\[[^\]]+\]\s*)?다음\s*"
+    return bool(re.match(pattern, text)) and "중" not in text[:5]
+def extract_answer(block_lines: List[str]) -> Tuple[List[str], str | None]:
+    """블록에서 정답 표기를 찾아 제거 후 반환"""
+    answer_pattern = re.compile(r"정답[:：]?\s*([①-⑤OX])")
+    answer = None
+    cleaned = []
+    for line in block_lines:
+        m = answer_pattern.search(line)
+        if m:
+            answer = m.group(1)
+            line = answer_pattern.sub("", line).strip()
+            if line:
+                cleaned.append(line)
+        else:
+            cleaned.append(line)
+    return cleaned, answer
 
-def is_passage_intro(text: str) -> bool:
-    """새로운 지문 안내 문구 인식"""
-    if text.startswith("다음 ") and "중" not in text[:5]:
+
+        block, answer = extract_answer(block)
+            answer=answer,
         return True
     return False
 

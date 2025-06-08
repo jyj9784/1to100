@@ -1,6 +1,38 @@
 import fitz  # PyMuPDF
 
 
+def extract_text_and_images(pdf_path: str):
+    """PDF에서 텍스트와 이미지 좌표를 추출한다."""
+    extracted_text = ""
+    images = []
+
+    with fitz.open(pdf_path) as doc:
+        for page_number, page in enumerate(doc, start=1):
+            width, height = page.rect.width, page.rect.height
+            top_margin = 60
+            bottom_margin = 70
+
+            # 좌우 분할하여 텍스트 추출
+            left_rect = fitz.Rect(0, top_margin, width / 2, height - bottom_margin)
+            right_rect = fitz.Rect(width / 2, top_margin, width, height - bottom_margin)
+
+            left = page.get_text("text", clip=left_rect)
+            right = page.get_text("text", clip=right_rect)
+
+            extracted_text += (left or "") + "\n\n" + (right or "") + "\n\n"
+
+            # 이미지 좌표 기록
+            page_dict = page.get_text("dict")
+            for block in page_dict.get("blocks", []):
+                if block.get("type") == 1:  # image block
+                    images.append({
+                        "page": page_number,
+                        "bbox": block["bbox"],
+                    })
+
+    return extracted_text, images
+
+
 def extract_text_from_pdf(pdf_path: str) -> str:
     """PDF에서 텍스트만 추출한다."""
     extracted_text = ""
