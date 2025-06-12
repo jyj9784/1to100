@@ -1,4 +1,7 @@
+import os
 import fitz  # PyMuPDF
+from PIL import Image
+import pytesseract
 
 
 def extract_text_and_images(pdf_path: str):
@@ -100,3 +103,15 @@ def extract_question_images(pdf_path: str, out_dir: str):
                 pix = page.get_pixmap(clip=fitz.Rect(*region))
                 pix.save(os.path.join(out_dir, f"question_{q_index}.png"))
                 q_index += 1
+
+
+def extract_text_from_images(img_dir: str) -> list[str]:
+    texts = []
+    for img_name in sorted(os.listdir(img_dir)):
+        if not img_name.lower().endswith((".png", ".jpg", ".jpeg")):
+            continue
+        img_path = os.path.join(img_dir, img_name)
+        image = Image.open(img_path)
+        text = pytesseract.image_to_string(image, lang="kor")
+        texts.append(text.strip())
+    return texts

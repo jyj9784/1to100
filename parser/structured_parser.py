@@ -19,6 +19,7 @@ def should_skip_line(text: str) -> bool:
     return any(re.search(p, text) for p in skip_patterns)
 
 
+def is_passage_intro(text: str) -> bool:
     pattern = r"^(?:\[[^\]]+\]\s*)?다음\s*"
     return bool(re.match(pattern, text)) and "중" not in text[:5]
 def extract_answer(block_lines: List[str]) -> Tuple[List[str], str | None]:
@@ -36,12 +37,6 @@ def extract_answer(block_lines: List[str]) -> Tuple[List[str], str | None]:
         else:
             cleaned.append(line)
     return cleaned, answer
-
-
-        block, answer = extract_answer(block)
-            answer=answer,
-        return True
-    return False
 
 
 
