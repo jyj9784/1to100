@@ -53,3 +53,50 @@ def extract_text_from_pdf(pdf_path: str) -> str:
             extracted_text += (left or "") + "\n\n" + (right or "") + "\n\n"
 
     return extracted_text
+
+
+def extract_question_images(pdf_path: str, out_dir: str):
+    """문항 번호 기준으로 영역을 잘라 이미지로 저장한다."""
+    import os
+    import re
+
+    os.makedirs(out_dir, exist_ok=True)
+
+    pattern = re.compile(r"^(?:\(\d+\)|\d+\s*[.)])")
+
+    with fitz.open(pdf_path) as doc:
+        q_index = 1
+        for page in doc:
+            page_dict = page.get_text("dict")
+            region = None
+
+            for block in page_dict.get("blocks", []):
+                if block.get("type") != 0:
+                    continue
+
+                text = "".join(
+                    span["text"]
+                    for line in block.get("lines", [])
+                    for span in line.get("spans", [])
+                ).strip()
+
+                if not text:
+                    continue
+
+                if pattern.match(text):
+                    if region:
+                        pix = page.get_pixmap(clip=fitz.Rect(*region))
+                        pix.save(os.path.join(out_dir, f"question_{q_index}.png"))
+                        q_index += 1
+                    region = list(block["bbox"])
+                elif region:
+                    b = block["bbox"]
+                    region[0] = min(region[0], b[0])
+                    region[1] = min(region[1], b[1])
+                    region[2] = max(region[2], b[2])
+                    region[3] = max(region[3], b[3])
+
+            if region:
+                pix = page.get_pixmap(clip=fitz.Rect(*region))
+                pix.save(os.path.join(out_dir, f"question_{q_index}.png"))
+                q_index += 1
