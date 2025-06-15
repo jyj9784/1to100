@@ -3,6 +3,12 @@
 pip install -r requirements.txt
 
 ````
+| 라이브러리                | 역할                         |
+| -------------------- | -------------------------- |
+| **streamlit**        | 웹 기반 GUI 인터페이스 구현          |
+| **jinja2**           | 문제지를 HTML 템플릿 형식으로 구성      |
+| **weasyprint**       | HTML + CSS를 PDF로 변환        |
+| **PyMuPDF** (`fitz`) | PDF에서 텍스트를 추출 (지문, 문제 분석용) |
 
 ---
 
