@@ -4,7 +4,7 @@ from tempfile import NamedTemporaryFile
 from parser.text_extractor import extract_text_from_pdf
 from parser.structured_parser import parse_passage_and_questions
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML
+from xhtml2pdf import pisa
 from pathlib import Path
 
 
@@ -15,7 +15,8 @@ def render_pdf(data):
     html_out = template.render(**data)
 
     tmp_pdf = NamedTemporaryFile(delete=False, suffix=".pdf")
-    HTML(string=html_out).write_pdf(tmp_pdf.name)
+    with open(tmp_pdf.name, "wb") as f:
+        pisa.CreatePDF(html_out, dest=f)
     return tmp_pdf.name
 
 

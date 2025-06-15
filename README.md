@@ -4,21 +4,6 @@
 pip install -r requirements.txt
 ```
 
-## Windows 추가 설치
-
-WeasyPrint 사용을 위해 GTK, Pango, Cairo 등 의존성을 설치해야 합니다.
-
-1. [MSYS2](https://www.msys2.org/)를 설치합니다.
-2. MSYS2 터미널에서 다음 명령을 실행합니다.
-
-```bash
-pacman -S mingw-w64-ucrt-x86_64-gtk3 mingw-w64-ucrt-x86_64-cairo mingw-w64-ucrt-x86_64-pango
-```
-
-Python 3.13과 같이 지원되지 않는 버전에서는 오류가 발생할 수 있습니다.
-
----
-
 ## 실행
 
 ```bash

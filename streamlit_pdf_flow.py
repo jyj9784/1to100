@@ -2,7 +2,7 @@ import streamlit as st
 import io
 from tempfile import NamedTemporaryFile
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML
+from xhtml2pdf import pisa
 from pathlib import Path
 from parser.text_extractor import extract_text_from_pdf, extract_question_images
 from parser.structured_parser import parse_passage_and_questions
@@ -17,7 +17,7 @@ def render_pdf(data):
     html_out = template.render(**data)
 
     pdf_io = io.BytesIO()
-    HTML(string=html_out).write_pdf(target=pdf_io)
+    pisa.CreatePDF(html_out, dest=pdf_io)
     pdf_io.seek(0)
     return pdf_io, html_out
 
