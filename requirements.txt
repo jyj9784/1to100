@@ -1,4 +1,4 @@
 streamlit
 jinja2
-weasyprint
+xhtml2pdf
 PyMuPDF

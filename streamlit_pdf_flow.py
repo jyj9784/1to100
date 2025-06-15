@@ -2,9 +2,9 @@ import streamlit as st
 import io
 from tempfile import NamedTemporaryFile
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML
+from xhtml2pdf import pisa
 from pathlib import Path
-from parser.text_extractor import extract_text_from_pdf
+from parser.text_extractor import extract_text_from_pdf, extract_question_images
 from parser.structured_parser import parse_passage_and_questions
 
 # PDF 렌더링용 함수 (메모리 기반 처리)
@@ -17,7 +17,7 @@ def render_pdf(data):
     html_out = template.render(**data)
 
     pdf_io = io.BytesIO()
-    HTML(string=html_out).write_pdf(target=pdf_io)
+    pisa.CreatePDF(html_out, dest=pdf_io)
     pdf_io.seek(0)
     return pdf_io, html_out
 
@@ -33,7 +33,9 @@ if pdf_file and st.button("1️⃣ 텍스트 추출 및 파싱"):
     tmp.flush()
 
     raw_text = extract_text_from_pdf(tmp.name)
+    extract_question_images(tmp.name, "./data/question_images")
     passage, questions = parse_passage_and_questions(raw_text)
+    st.info("문항 이미지는 ./data/question_images 폴더에 저장됩니다.")
 
     st.session_state.parsed_data = {
         "title": title,
