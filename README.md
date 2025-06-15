@@ -3,6 +3,7 @@
 ```bash
 pip install -r requirements.txt
 ```
+OCR 기능을 사용하려면 `pytesseract`를 설치해야 합니다.
 
 ## Windows 추가 설치
 

@@ -2,3 +2,5 @@ streamlit
 jinja2
 weasyprint
 PyMuPDF
+pytesseract
+Pillow
