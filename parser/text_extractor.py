@@ -114,7 +114,7 @@ def extract_question_images(pdf_path: str, out_dir: str):
 
                         number = num_match.group(0) if num_match else ""
                         number = re.sub(r"\D", "", number)
-                        sentences = re.split(r"[.!?]|\n", ocr_text)
+                        sentences = re.split(r"[.!?]|\n", text_region)
                         last_sentence = ""
                         for s in reversed(sentences):
                             s = s.strip()
@@ -151,7 +151,7 @@ def extract_question_images(pdf_path: str, out_dir: str):
 
                 number = num_match.group(0) if num_match else ""
                 number = re.sub(r"\D", "", number)
-                sentences = re.split(r"[.!?]|\n", ocr_text)
+                sentences = re.split(r"[.!?]|\n", text_region)
                 last_sentence = ""
                 for s in reversed(sentences):
                     s = s.strip()
