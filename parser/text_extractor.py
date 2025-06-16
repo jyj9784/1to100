@@ -55,6 +55,19 @@ def extract_text_from_pdf(pdf_path: str) -> str:
     return extracted_text
 
 
+def ocr_question_image(image_path: str) -> str:
+    """주어진 이미지에서 OCR을 수행해 텍스트 파일로 저장하고 경로를 반환한다."""
+    import os
+    from PIL import Image
+    import pytesseract
+
+    text = pytesseract.image_to_string(Image.open(image_path))
+    text_path = os.path.splitext(image_path)[0] + ".txt"
+    with open(text_path, "w", encoding="utf-8") as f:
+        f.write(text)
+    return text_path
+
+
 def extract_question_images(pdf_path: str, out_dir: str):
     """문항 번호 기준으로 영역을 잘라 이미지로 저장하고 메타데이터를 반환한다."""
     import os
@@ -90,6 +103,7 @@ def extract_question_images(pdf_path: str, out_dir: str):
                         out_path = os.path.join(out_dir, f"question_{q_index}.png")
                         pix = page.get_pixmap(clip=fitz.Rect(*region))
                         pix.save(out_path)
+                        ocr_path = ocr_question_image(out_path)
 
                         text_region = page.get_text("text", clip=fitz.Rect(*region)).strip()
                         num_match = pattern.match(text_region)
@@ -107,6 +121,7 @@ def extract_question_images(pdf_path: str, out_dir: str):
                             "page": page_number,
                             "bbox": region,
                             "path": out_path,
+                            "ocr_text_path": ocr_path,
                             "number": number,
                             "last_sentence": last_sentence,
                         })
@@ -124,6 +139,7 @@ def extract_question_images(pdf_path: str, out_dir: str):
                 out_path = os.path.join(out_dir, f"question_{q_index}.png")
                 pix = page.get_pixmap(clip=fitz.Rect(*region))
                 pix.save(out_path)
+                ocr_path = ocr_question_image(out_path)
 
                 text_region = page.get_text("text", clip=fitz.Rect(*region)).strip()
                 num_match = pattern.match(text_region)
@@ -141,6 +157,7 @@ def extract_question_images(pdf_path: str, out_dir: str):
                     "page": page_number,
                     "bbox": region,
                     "path": out_path,
+                    "ocr_text_path": ocr_path,
                     "number": number,
                     "last_sentence": last_sentence,
                 })
