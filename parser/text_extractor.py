@@ -56,7 +56,7 @@ def extract_text_from_pdf(pdf_path: str) -> str:
 
 
 def extract_question_images(pdf_path: str, out_dir: str):
-    """문항 번호 기준으로 영역을 잘라 이미지로 저장한다."""
+    """문항 번호 기준으로 영역을 잘라 이미지로 저장하고 메타데이터를 반환한다."""
     import os
     import re
 
@@ -64,9 +64,11 @@ def extract_question_images(pdf_path: str, out_dir: str):
 
     pattern = re.compile(r"^(?:\(\d+\)|\d+\s*[.)])")
 
+    results = []
+
     with fitz.open(pdf_path) as doc:
         q_index = 1
-        for page in doc:
+        for page_number, page in enumerate(doc, start=1):
             page_dict = page.get_text("dict")
             region = None
 
@@ -85,8 +87,30 @@ def extract_question_images(pdf_path: str, out_dir: str):
 
                 if pattern.match(text):
                     if region:
+                        out_path = os.path.join(out_dir, f"question_{q_index}.png")
                         pix = page.get_pixmap(clip=fitz.Rect(*region))
-                        pix.save(os.path.join(out_dir, f"question_{q_index}.png"))
+                        pix.save(out_path)
+
+                        text_region = page.get_text("text", clip=fitz.Rect(*region)).strip()
+                        num_match = pattern.match(text_region)
+                        number = num_match.group(0) if num_match else ""
+                        number = re.sub(r"\D", "", number)
+                        sentences = re.split(r"[.!?]|\n", text_region)
+                        last_sentence = ""
+                        for s in reversed(sentences):
+                            s = s.strip()
+                            if s:
+                                last_sentence = s
+                                break
+
+                        results.append({
+                            "page": page_number,
+                            "bbox": region,
+                            "path": out_path,
+                            "number": number,
+                            "last_sentence": last_sentence,
+                        })
+
                         q_index += 1
                     region = list(block["bbox"])
                 elif region:
@@ -97,6 +121,29 @@ def extract_question_images(pdf_path: str, out_dir: str):
                     region[3] = max(region[3], b[3])
 
             if region:
+                out_path = os.path.join(out_dir, f"question_{q_index}.png")
                 pix = page.get_pixmap(clip=fitz.Rect(*region))
-                pix.save(os.path.join(out_dir, f"question_{q_index}.png"))
+                pix.save(out_path)
+
+                text_region = page.get_text("text", clip=fitz.Rect(*region)).strip()
+                num_match = pattern.match(text_region)
+                number = num_match.group(0) if num_match else ""
+                number = re.sub(r"\D", "", number)
+                sentences = re.split(r"[.!?]|\n", text_region)
+                last_sentence = ""
+                for s in reversed(sentences):
+                    s = s.strip()
+                    if s:
+                        last_sentence = s
+                        break
+
+                results.append({
+                    "page": page_number,
+                    "bbox": region,
+                    "path": out_path,
+                    "number": number,
+                    "last_sentence": last_sentence,
+                })
                 q_index += 1
+
+    return results
