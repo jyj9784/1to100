@@ -6,6 +6,7 @@ from xhtml2pdf import pisa
 from pathlib import Path
 from parser.text_extractor import extract_text_from_pdf, extract_question_images
 from parser.structured_parser import parse_passage_and_questions
+from typing import List
 
 # PDF 렌더링용 함수 (메모리 기반 처리)
 
@@ -33,9 +34,11 @@ if pdf_file and st.button("1️⃣ 텍스트 추출 및 파싱"):
     tmp.flush()
 
     raw_text = extract_text_from_pdf(tmp.name)
-    extract_question_images(tmp.name, "./data/question_images")
+    img_paths = extract_question_images(tmp.name, "./data/question_images")
     passage, questions = parse_passage_and_questions(raw_text)
     st.info("문항 이미지는 ./data/question_images 폴더에 저장됩니다.")
+
+    st.session_state.question_images = img_paths
 
     st.session_state.parsed_data = {
         "title": title,
@@ -51,6 +54,19 @@ if pdf_file and st.button("1️⃣ 텍스트 추출 및 파싱"):
     }
     st.success("✅ 파싱 완료! 아래에서 수정하고 PDF를 생성하세요.")
     st.json(st.session_state.parsed_data)
+
+    st.subheader("🖼 추출된 문항 이미지")
+    for i, path in enumerate(st.session_state.question_images, start=1):
+        last_sent = questions[i-1].stem.strip().splitlines()[-1]
+        edited = st.text_input(
+            f"{i}번 마지막 문장", value=last_sent, key=f"img_last_{i}")
+        st.image(path, caption=Path(path).name)
+
+        q_data = st.session_state.parsed_data["questions"][i-1]
+        lines = q_data["question"].splitlines()
+        if lines:
+            lines[-1] = edited
+            q_data["question"] = "\n".join(lines)
 
 if "parsed_data" in st.session_state:
     data = st.session_state.parsed_data
