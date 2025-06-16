@@ -25,6 +25,16 @@ def render_pdf(data):
 st.title("PDF 업로드 → JSON 편집 → PDF 출력")
 
 pdf_file = st.file_uploader("PDF 업로드", type="pdf")
+
+if pdf_file:
+    import base64
+    b64 = base64.b64encode(pdf_file.getvalue()).decode("utf-8")
+    st.subheader("📑 업로드한 PDF 미리보기")
+    st.components.v1.html(
+        f'<embed src="data:application/pdf;base64,{b64}" width="700" height="500" type="application/pdf">',
+        height=500,
+    )
+    pdf_file.seek(0)
 title = st.text_input("문제지 제목", "문제지")
 
 if pdf_file and st.button("1️⃣ 텍스트 추출 및 파싱"):
@@ -38,15 +48,28 @@ if pdf_file and st.button("1️⃣ 텍스트 추출 및 파싱"):
     st.info("문항 이미지는 ./data/question_images 폴더에 저장됩니다.")
     st.json(img_results)
 
+    img_map = {res["number"]: res["path"] for res in img_results if res.get("number")}
+
     st.session_state.parsed_data = {
         "title": title,
         "paragraphs": [passage.content],
         "questions": [
-            {"question": q.stem, "choices": q.choices or [], "answer": q.answer or ""}
+            {
+                "number": q.number,
+                "question": q.stem,
+                "choices": q.choices or [],
+                "answer": q.answer or "",
+                "image": img_map.get(q.number)
+            }
             for q in questions if q.metadata.type == "multiple_choice"
         ],
         "oxQuestions": [
-            {"question": q.stem, "answer": q.answer or ""}
+            {
+                "number": q.number,
+                "question": q.stem,
+                "answer": q.answer or "",
+                "image": img_map.get(q.number)
+            }
             for q in questions if q.metadata.type == "ox"
         ]
     }
@@ -64,6 +87,8 @@ if "parsed_data" in st.session_state:
     for i, q in enumerate(data["questions"]):
         q["question"] = st.text_input(
             f"{i+1}. 질문", value=q["question"], key=f"q_{i}")
+        if q.get("image"):
+            st.image(q["image"], caption=f"문항 이미지 {q['number']}")
         for j, choice in enumerate(q["choices"]):
             q["choices"][j] = st.text_input(
                 f" - 선택지 {j+1}", value=choice, key=f"q_{i}_c_{j}")
@@ -72,6 +97,8 @@ if "parsed_data" in st.session_state:
     for i, ox in enumerate(data["oxQuestions"]):
         ox["question"] = st.text_input(
             f"OX {i+1}. 질문", value=ox["question"], key=f"ox_{i}")
+        if ox.get("image"):
+            st.image(ox["image"], caption=f"OX 이미지 {ox['number']}")
 
     if st.button("📄 PDF 생성 및 다운로드"):
         pdf_io, html_preview = render_pdf(data)

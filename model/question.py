@@ -23,7 +23,8 @@ class Question:
         choices: Optional[List[str]] = None,  # choices만 유지
         explanation: Optional[str] = None,
         conditions: Optional[str] = None,
-        metadata: Optional[Metadata] = None
+        metadata: Optional[Metadata] = None,
+        number: Optional[str] = None,
     ):
         self.stem = stem
         self.choices = choices
@@ -32,9 +33,11 @@ class Question:
         self.conditions = conditions
         self.metadata = metadata or Metadata(
             type="etc", difficulty="중", points=None)
+        self.number = number
 
     def to_dict(self):
         return {
+            "number": self.number,
             "stem": self.stem,
             "choices": self.choices,  # choices만 반환
             "answer": self.answer,

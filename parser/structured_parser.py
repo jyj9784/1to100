@@ -62,10 +62,17 @@ def classify_question_type(text: str) -> str:
 
 
 def extract_choices(block_lines: List[str]) -> List[str]:
-    text = " ".join(block_lines)
-    pattern = r"(①[^②③④⑤]+|②[^①③④⑤]+|③[^①②④⑤]+|④[^①②③⑤]+|⑤[^①②③④]+)"
-    matches = re.findall(pattern, text)
-    return [m.strip() for m in matches]
+    """선택지를 보다 정확하게 분리한다."""
+    text = "\n".join(block_lines)
+    marks = ["①", "②", "③", "④", "⑤"]
+    choices: List[str] = []
+    for i, mark in enumerate(marks):
+        lookahead = "|".join(map(re.escape, marks[i + 1:])) or "$"
+        pattern = re.compile(re.escape(mark) + r"(.*?)" + r"(?=" + lookahead + ")", re.S)
+        m = pattern.search(text)
+        if m:
+            choices.append(m.group(1).strip())
+    return choices
 
 
 def parse_passage_and_questions(text: str) -> Tuple[Passage, List[Question]]:
@@ -114,6 +121,12 @@ def parse_passage_and_questions(text: str) -> Tuple[Passage, List[Question]]:
         q_type = classify_question_type(full_text)
         metadata = Metadata(type=q_type, difficulty="중", points=None)
 
+        number = None
+        m_num = re.match(r"^(?:\((\d+)\)|(\d+))", block[0])
+        if m_num:
+            number = m_num.group(1) or m_num.group(2)
+            block[0] = block[0][m_num.end():].strip()
+
         block, answer = extract_answer(block)
         choices = extract_choices(block)
 
@@ -131,7 +144,8 @@ def parse_passage_and_questions(text: str) -> Tuple[Passage, List[Question]]:
             answer=answer,
             explanation=None,
             conditions=None,
-            metadata=metadata
+            metadata=metadata,
+            number=number,
         )
 
         if q_type == "subjective":
