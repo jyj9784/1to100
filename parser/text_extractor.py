@@ -64,9 +64,11 @@ def extract_question_images(pdf_path: str, out_dir: str):
 
     pattern = re.compile(r"^(?:\(\d+\)|\d+\s*[.)])")
 
+    results = []
+
     with fitz.open(pdf_path) as doc:
         q_index = 1
-        for page in doc:
+        for page_number, page in enumerate(doc, start=1):
             page_dict = page.get_text("dict")
             region = None
 
@@ -86,7 +88,16 @@ def extract_question_images(pdf_path: str, out_dir: str):
                 if pattern.match(text):
                     if region:
                         pix = page.get_pixmap(clip=fitz.Rect(*region))
-                        pix.save(os.path.join(out_dir, f"question_{q_index}.png"))
+                        file_path = os.path.join(out_dir, f"question_{q_index}.png")
+                        pix.save(file_path)
+                        text_region = page.get_text("text", clip=fitz.Rect(*region))
+                        results.append({
+                            "index": q_index,
+                            "page": page_number,
+                            "bbox": region,
+                            "text": text_region.strip(),
+                            "path": file_path,
+                        })
                         q_index += 1
                     region = list(block["bbox"])
                 elif region:
@@ -98,5 +109,16 @@ def extract_question_images(pdf_path: str, out_dir: str):
 
             if region:
                 pix = page.get_pixmap(clip=fitz.Rect(*region))
-                pix.save(os.path.join(out_dir, f"question_{q_index}.png"))
+                file_path = os.path.join(out_dir, f"question_{q_index}.png")
+                pix.save(file_path)
+                text_region = page.get_text("text", clip=fitz.Rect(*region))
+                results.append({
+                    "index": q_index,
+                    "page": page_number,
+                    "bbox": region,
+                    "text": text_region.strip(),
+                    "path": file_path,
+                })
                 q_index += 1
+
+    return results
