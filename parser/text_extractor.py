@@ -1,4 +1,5 @@
 import fitz  # PyMuPDF
+import json
 
 
 def extract_text_and_images(pdf_path: str):
@@ -55,13 +56,10 @@ def extract_text_from_pdf(pdf_path: str) -> str:
     return extracted_text
 
 
-def ocr_question_image(image_path: str) -> str:
-    """주어진 이미지에서 OCR을 수행해 텍스트 파일로 저장하고 경로를 반환한다."""
+def save_question_text(image_path: str, text: str) -> str:
+    """문항 텍스트를 파일로 저장하고 경로를 반환한다."""
     import os
-    from PIL import Image
-    import pytesseract
 
-    text = pytesseract.image_to_string(Image.open(image_path))
     text_path = os.path.splitext(image_path)[0] + ".txt"
     with open(text_path, "w", encoding="utf-8") as f:
         f.write(text)
@@ -72,6 +70,11 @@ def extract_question_images(pdf_path: str, out_dir: str):
     """문항 번호 기준으로 영역을 잘라 이미지로 저장하고 메타데이터를 반환한다."""
     import os
     import re
+
+    log_path = os.path.join(out_dir, "ocr_results.json")
+    if os.path.exists(log_path):
+        with open(log_path, "r", encoding="utf-8") as f:
+            return json.load(f)
 
     os.makedirs(out_dir, exist_ok=True)
 
@@ -103,9 +106,10 @@ def extract_question_images(pdf_path: str, out_dir: str):
                         out_path = os.path.join(out_dir, f"question_{q_index}.png")
                         pix = page.get_pixmap(clip=fitz.Rect(*region))
                         pix.save(out_path)
-                        ocr_path = ocr_question_image(out_path)
 
                         text_region = page.get_text("text", clip=fitz.Rect(*region)).strip()
+                        text_path = save_question_text(out_path, text_region)
+
                         num_match = pattern.match(text_region)
                         number = num_match.group(0) if num_match else ""
                         number = re.sub(r"\D", "", number)
@@ -121,7 +125,7 @@ def extract_question_images(pdf_path: str, out_dir: str):
                             "page": page_number,
                             "bbox": region,
                             "path": out_path,
-                            "ocr_text_path": ocr_path,
+                            "text_path": text_path,
                             "number": number,
                             "last_sentence": last_sentence,
                         })
@@ -139,9 +143,9 @@ def extract_question_images(pdf_path: str, out_dir: str):
                 out_path = os.path.join(out_dir, f"question_{q_index}.png")
                 pix = page.get_pixmap(clip=fitz.Rect(*region))
                 pix.save(out_path)
-                ocr_path = ocr_question_image(out_path)
-
                 text_region = page.get_text("text", clip=fitz.Rect(*region)).strip()
+                text_path = save_question_text(out_path, text_region)
+
                 num_match = pattern.match(text_region)
                 number = num_match.group(0) if num_match else ""
                 number = re.sub(r"\D", "", number)
@@ -157,10 +161,15 @@ def extract_question_images(pdf_path: str, out_dir: str):
                     "page": page_number,
                     "bbox": region,
                     "path": out_path,
-                    "ocr_text_path": ocr_path,
+                    "text_path": text_path,
                     "number": number,
                     "last_sentence": last_sentence,
                 })
                 q_index += 1
+
+    # 로그 파일 저장
+    log_path = os.path.join(out_dir, "ocr_results.json")
+    with open(log_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
 
     return results
