@@ -1,4 +1,5 @@
 import fitz  # PyMuPDF
+import json
 
 
 def extract_text_and_images(pdf_path: str):
@@ -58,10 +59,12 @@ def extract_text_from_pdf(pdf_path: str) -> str:
 def ocr_question_image(image_path: str) -> str:
     """주어진 이미지에서 OCR을 수행해 텍스트 파일로 저장하고 경로를 반환한다."""
     import os
-    from PIL import Image
-    import pytesseract
+    import easyocr
 
-    text = pytesseract.image_to_string(Image.open(image_path))
+    reader = easyocr.Reader(["ko", "en"], gpu=False)
+    lines = reader.readtext(image_path, detail=0)
+    text = "\n".join(lines)
+
     text_path = os.path.splitext(image_path)[0] + ".txt"
     with open(text_path, "w", encoding="utf-8") as f:
         f.write(text)
@@ -104,12 +107,13 @@ def extract_question_images(pdf_path: str, out_dir: str):
                         pix = page.get_pixmap(clip=fitz.Rect(*region))
                         pix.save(out_path)
                         ocr_path = ocr_question_image(out_path)
+                        with open(ocr_path, "r", encoding="utf-8") as f:
+                            ocr_text = f.read()
 
-                        text_region = page.get_text("text", clip=fitz.Rect(*region)).strip()
-                        num_match = pattern.match(text_region)
+                        num_match = pattern.match(ocr_text)
                         number = num_match.group(0) if num_match else ""
                         number = re.sub(r"\D", "", number)
-                        sentences = re.split(r"[.!?]|\n", text_region)
+                        sentences = re.split(r"[.!?]|\n", ocr_text)
                         last_sentence = ""
                         for s in reversed(sentences):
                             s = s.strip()
@@ -141,11 +145,13 @@ def extract_question_images(pdf_path: str, out_dir: str):
                 pix.save(out_path)
                 ocr_path = ocr_question_image(out_path)
 
-                text_region = page.get_text("text", clip=fitz.Rect(*region)).strip()
-                num_match = pattern.match(text_region)
+                with open(ocr_path, "r", encoding="utf-8") as f:
+                    ocr_text = f.read()
+
+                num_match = pattern.match(ocr_text)
                 number = num_match.group(0) if num_match else ""
                 number = re.sub(r"\D", "", number)
-                sentences = re.split(r"[.!?]|\n", text_region)
+                sentences = re.split(r"[.!?]|\n", ocr_text)
                 last_sentence = ""
                 for s in reversed(sentences):
                     s = s.strip()
@@ -162,5 +168,10 @@ def extract_question_images(pdf_path: str, out_dir: str):
                     "last_sentence": last_sentence,
                 })
                 q_index += 1
+
+    # 로그 파일 저장
+    log_path = os.path.join(out_dir, "ocr_results.json")
+    with open(log_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
 
     return results

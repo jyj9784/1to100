@@ -37,6 +37,8 @@ if pdf_file and st.button("1️⃣ 텍스트 추출 및 파싱"):
     passage, questions = parse_passage_and_questions(raw_text)
     st.info("문항 이미지는 ./data/question_images 폴더에 저장됩니다.")
     st.json(img_results)
+    st.session_state.img_results = img_results
+    st.session_state.questions = questions
 
     st.session_state.parsed_data = {
         "title": title,
@@ -52,6 +54,19 @@ if pdf_file and st.button("1️⃣ 텍스트 추출 및 파싱"):
     }
     st.success("✅ 파싱 완료! 아래에서 수정하고 PDF를 생성하세요.")
     st.json(st.session_state.parsed_data)
+
+    if "img_results" in st.session_state and "questions" in st.session_state:
+        st.subheader("🖼 문항 이미지 매칭")
+        for r in st.session_state.img_results:
+            num = int(r.get("number", 0)) if str(r.get("number", "")).isdigit() else None
+            if num and num <= len(st.session_state.questions):
+                qtext = st.session_state.questions[num-1].stem
+            else:
+                qtext = "매칭 실패"
+            st.image(r["path"], width=250)
+            st.write(f"{num if num else '?'}번: {qtext}")
+            st.write(f"마지막 줄: {r['last_sentence']}")
+            st.markdown("---")
 
 if "parsed_data" in st.session_state:
     data = st.session_state.parsed_data
