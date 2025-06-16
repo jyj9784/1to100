@@ -22,10 +22,10 @@ def save_by_type(questions, logdir):
             "metadata": q.metadata.__dict__
         }
 
+    type_map = {}
     for q in questions:
-        q_type = q.metadata.type
-        type_map = {
-            q_type: [q for q in questions if q.metadata.type == q_type]}
+        type_map.setdefault(q.metadata.type, []).append(q)
+
     for q_type, qlist in type_map.items():
         out_path = os.path.join(logdir, f"questions_{q_type}.json")
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
