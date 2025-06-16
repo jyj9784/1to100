@@ -2,3 +2,5 @@ streamlit
 jinja2
 xhtml2pdf
 PyMuPDF
+pytesseract
+Pillow
