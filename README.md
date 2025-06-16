@@ -23,6 +23,3 @@ streamlit run streamlit_pdf_flow.py
 
 파싱 과정에서는 PyMuPDF를 이용해 텍스트를 추출합니다. 추출된 내용은 문제별로 구조화되어 JSON 형식으로 표시됩니다.
 
-
-##연결확인
-0616연결확인
