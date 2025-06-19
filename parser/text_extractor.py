@@ -2,40 +2,13 @@ import fitz  # PyMuPDF
 import json
 
 
-def extract_text_and_images(pdf_path: str):
-    """PDF에서 텍스트와 이미지 좌표를 추출한다."""
-    extracted_text = ""
-    images = []
-
-    with fitz.open(pdf_path) as doc:
-        for page_number, page in enumerate(doc, start=1):
-            width, height = page.rect.width, page.rect.height
-            top_margin = 60
-            bottom_margin = 70
-
-            # 좌우 분할하여 텍스트 추출
-            left_rect = fitz.Rect(0, top_margin, width / 2, height - bottom_margin)
-            right_rect = fitz.Rect(width / 2, top_margin, width, height - bottom_margin)
-
-            left = page.get_text("text", clip=left_rect)
-            right = page.get_text("text", clip=right_rect)
-
-            extracted_text += (left or "") + "\n\n" + (right or "") + "\n\n"
-
-            # 이미지 좌표 기록
-            page_dict = page.get_text("dict")
-            for block in page_dict.get("blocks", []):
-                if block.get("type") == 1:  # image block
-                    images.append({
-                        "page": page_number,
-                        "bbox": block["bbox"],
-                    })
-
-    return extracted_text, images
-
-
 def extract_text_from_pdf(pdf_path: str) -> str:
-    """PDF에서 텍스트만 추출한다."""
+    """
+    PDF에서 좌우 텍스트만 추출한다. (이미지 좌표는 추출하지 않음)
+
+    :param pdf_path: PDF 파일 경로
+    :return: 전체 텍스트 문자열
+    """
     extracted_text = ""
 
     with fitz.open(pdf_path) as doc:
@@ -44,10 +17,11 @@ def extract_text_from_pdf(pdf_path: str) -> str:
             top_margin = 60
             bottom_margin = 70
 
-            # 왼쪽/오른쪽 텍스트 영역 크롭 (헤더/푸터 제거)
+            # 좌우 영역 분할
             left_rect = fitz.Rect(0, top_margin, width / 2, height - bottom_margin)
             right_rect = fitz.Rect(width / 2, top_margin, width, height - bottom_margin)
 
+            # 각 영역에서 텍스트 추출
             left = page.get_text("text", clip=left_rect)
             right = page.get_text("text", clip=right_rect)
 
