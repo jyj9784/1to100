@@ -40,8 +40,19 @@ def save_question_text(image_path: str, text: str) -> str:
     return text_path
 
 
-def extract_question_images(pdf_path: str, out_dir: str):
-    """문항 번호 기준으로 영역을 잘라 이미지로 저장하고 메타데이터를 반환한다."""
+def extract_question_images(
+    pdf_path: str,
+    out_dir: str,
+    top_margin: int = 60,
+    bottom_margin: int = 70,
+):
+    """문항 번호 기준으로 영역을 잘라 이미지로 저장하고 메타데이터를 반환한다.
+
+    :param pdf_path: PDF 파일 경로
+    :param out_dir: 결과 이미지를 저장할 폴더 경로
+    :param top_margin: 페이지 상단 여백
+    :param bottom_margin: 페이지 하단 여백
+    """
     import os
     import re
 
@@ -59,7 +70,9 @@ def extract_question_images(pdf_path: str, out_dir: str):
     with fitz.open(pdf_path) as doc:
         q_index = 1
         for page_number, page in enumerate(doc, start=1):
-            page_dict = page.get_text("dict")
+            width, height = page.rect.width, page.rect.height
+            clip_page = fitz.Rect(0, top_margin, width, height - bottom_margin)
+            page_dict = page.get_text("dict", clip=clip_page)
             region = None
 
             for block in page_dict.get("blocks", []):
@@ -78,10 +91,16 @@ def extract_question_images(pdf_path: str, out_dir: str):
                 if pattern.match(text):
                     if region:
                         out_path = os.path.join(out_dir, f"question_{q_index}.png")
-                        pix = page.get_pixmap(clip=fitz.Rect(*region))
+                        clip_rect = fitz.Rect(
+                            region[0],
+                            max(region[1], top_margin),
+                            region[2],
+                            min(region[3], height - bottom_margin),
+                        )
+                        pix = page.get_pixmap(clip=clip_rect)
                         pix.save(out_path)
 
-                        text_region = page.get_text("text", clip=fitz.Rect(*region)).strip()
+                        text_region = page.get_text("text", clip=clip_rect).strip()
                         text_path = save_question_text(out_path, text_region)
 
                         num_match = pattern.match(text_region)
@@ -98,7 +117,7 @@ def extract_question_images(pdf_path: str, out_dir: str):
 
                         results.append({
                             "page": page_number,
-                            "bbox": region,
+                            "bbox": [clip_rect.x0, clip_rect.y0, clip_rect.x1, clip_rect.y1],
                             "path": out_path,
                             "text_path": text_path,
                             "number": number,
@@ -116,9 +135,15 @@ def extract_question_images(pdf_path: str, out_dir: str):
 
             if region:
                 out_path = os.path.join(out_dir, f"question_{q_index}.png")
-                pix = page.get_pixmap(clip=fitz.Rect(*region))
+                clip_rect = fitz.Rect(
+                    region[0],
+                    max(region[1], top_margin),
+                    region[2],
+                    min(region[3], height - bottom_margin),
+                )
+                pix = page.get_pixmap(clip=clip_rect)
                 pix.save(out_path)
-                text_region = page.get_text("text", clip=fitz.Rect(*region)).strip()
+                text_region = page.get_text("text", clip=clip_rect).strip()
                 text_path = save_question_text(out_path, text_region)
 
                 num_match = pattern.match(text_region)
@@ -135,7 +160,7 @@ def extract_question_images(pdf_path: str, out_dir: str):
 
                 results.append({
                     "page": page_number,
-                    "bbox": region,
+                    "bbox": [clip_rect.x0, clip_rect.y0, clip_rect.x1, clip_rect.y1],
                     "path": out_path,
                     "text_path": text_path,
                     "number": number,
