@@ -78,17 +78,64 @@ def extract_question_images(pdf_path: str, out_dir: str):
 
     os.makedirs(out_dir, exist_ok=True)
 
-    pattern = re.compile(r"^(?:\(\d+\)|\d+\s*[.)])")
+    # 문제 번호 패턴 (1, (1), 1번, 제1문 등 다양한 표기 인식)
+    pattern = re.compile(r"(?:제)?\(?\s*\d+\s*\)?\s*(?:번|문)?\s*[.)]?")
+
+    # 자를 때 약간의 여백을 주기 위한 마진 값
+    margin = 5
+    # 큰 빈 공간이 나오면 새로운 문항으로 판단하기 위한 임계값
+    gap_threshold = 40
 
     results = []
+
+    def finalize_region(page, region, page_number, q_index):
+        out_path = os.path.join(out_dir, f"question_{q_index}.png")
+        r = [
+            max(0, region[0] - margin),
+            max(0, region[1] - margin),
+            min(page.rect.width, region[2] + margin),
+            min(page.rect.height, region[3] + margin),
+        ]
+        pix = page.get_pixmap(clip=fitz.Rect(*r))
+        pix.save(out_path)
+
+        text_region = page.get_text("text", clip=fitz.Rect(*r)).strip()
+        text_path = save_question_text(out_path, text_region)
+
+        num_match = pattern.search(text_region)
+
+        number = num_match.group(0) if num_match else ""
+        number = re.sub(r"\D", "", number)
+        sentences = re.split(r"[.!?]|\n", text_region)
+        last_sentence = ""
+        for s in reversed(sentences):
+            s = s.strip()
+            if s:
+                last_sentence = s
+                break
+
+        results.append({
+            "page": page_number,
+            "bbox": r,
+            "path": out_path,
+            "text_path": text_path,
+            "number": number,
+            "last_sentence": last_sentence,
+        })
 
     with fitz.open(pdf_path) as doc:
         q_index = 1
         for page_number, page in enumerate(doc, start=1):
             page_dict = page.get_text("dict")
-            region = None
+            blocks = sorted(
+                page_dict.get("blocks", []),
+                key=lambda b: (b.get("bbox", [0, 0])[1], b.get("bbox", [0, 0])[0]),
+            )
 
-            for block in page_dict.get("blocks", []):
+            region = None
+            prev_bottom = 0
+
+            for block in blocks:
                 if block.get("type") != 0:
                     continue
 
@@ -101,72 +148,28 @@ def extract_question_images(pdf_path: str, out_dir: str):
                 if not text:
                     continue
 
-                if pattern.match(text):
+                b = block["bbox"]
+
+                if pattern.search(text):
                     if region:
-                        out_path = os.path.join(out_dir, f"question_{q_index}.png")
-                        pix = page.get_pixmap(clip=fitz.Rect(*region))
-                        pix.save(out_path)
-
-                        text_region = page.get_text("text", clip=fitz.Rect(*region)).strip()
-                        text_path = save_question_text(out_path, text_region)
-
-                        num_match = pattern.match(text_region)
-
-                        number = num_match.group(0) if num_match else ""
-                        number = re.sub(r"\D", "", number)
-                        sentences = re.split(r"[.!?]|\n", text_region)
-                        last_sentence = ""
-                        for s in reversed(sentences):
-                            s = s.strip()
-                            if s:
-                                last_sentence = s
-                                break
-
-                        results.append({
-                            "page": page_number,
-                            "bbox": region,
-                            "path": out_path,
-                            "text_path": text_path,
-                            "number": number,
-                            "last_sentence": last_sentence,
-                        })
-
+                        finalize_region(page, region, page_number, q_index)
                         q_index += 1
-                    region = list(block["bbox"])
+                    region = list(b)
                 elif region:
-                    b = block["bbox"]
-                    region[0] = min(region[0], b[0])
-                    region[1] = min(region[1], b[1])
-                    region[2] = max(region[2], b[2])
-                    region[3] = max(region[3], b[3])
+                    if b[1] - prev_bottom > gap_threshold:
+                        finalize_region(page, region, page_number, q_index)
+                        q_index += 1
+                        region = list(b)
+                    else:
+                        region[0] = min(region[0], b[0])
+                        region[1] = min(region[1], b[1])
+                        region[2] = max(region[2], b[2])
+                        region[3] = max(region[3], b[3])
+
+                prev_bottom = b[3]
 
             if region:
-                out_path = os.path.join(out_dir, f"question_{q_index}.png")
-                pix = page.get_pixmap(clip=fitz.Rect(*region))
-                pix.save(out_path)
-                text_region = page.get_text("text", clip=fitz.Rect(*region)).strip()
-                text_path = save_question_text(out_path, text_region)
-
-                num_match = pattern.match(text_region)
-
-                number = num_match.group(0) if num_match else ""
-                number = re.sub(r"\D", "", number)
-                sentences = re.split(r"[.!?]|\n", text_region)
-                last_sentence = ""
-                for s in reversed(sentences):
-                    s = s.strip()
-                    if s:
-                        last_sentence = s
-                        break
-
-                results.append({
-                    "page": page_number,
-                    "bbox": region,
-                    "path": out_path,
-                    "text_path": text_path,
-                    "number": number,
-                    "last_sentence": last_sentence,
-                })
+                finalize_region(page, region, page_number, q_index)
                 q_index += 1
 
     # 로그 파일 저장
