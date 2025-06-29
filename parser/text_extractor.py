@@ -1,5 +1,6 @@
 import fitz  # PyMuPDF
 import json
+import re
 
 
 def extract_text_from_pdf(pdf_path: str) -> str:
@@ -149,3 +150,51 @@ def extract_question_images(pdf_path: str, out_dir: str):
         json.dump(results, f, ensure_ascii=False, indent=2)
 
     return results
+
+
+def extract_passages(text: str):
+    """지문 시작 안내 문구로부터 문제 번호 전까지를 추출한다."""
+    lines = text.splitlines()
+    passages = []
+    current = []
+    capturing = False
+
+    intro_pattern = re.compile(r"^[※\s]*(?:\[[^\]]+\]\s*)?다음.*?답하시오")
+    question_pattern = re.compile(r"^(?:\(\d+\)|\d+\s*[.)])")
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        if intro_pattern.search(stripped):
+            if capturing and current:
+                passages.append("\n".join(current).strip())
+                current = []
+            capturing = True
+            continue
+
+        if capturing:
+            if question_pattern.match(stripped):
+                passages.append("\n".join(current).strip())
+                current = []
+                capturing = False
+            else:
+                current.append(stripped)
+
+    if capturing and current:
+        passages.append("\n".join(current).strip())
+
+    return passages
+
+
+def extract_pdf_data(pdf_path: str, out_dir: str):
+    """텍스트, 지문, 문항 이미지를 한 번에 추출한다."""
+    text = extract_text_from_pdf(pdf_path)
+    passages = extract_passages(text)
+    images = extract_question_images(pdf_path, out_dir)
+    return {
+        "text": text,
+        "passages": passages,
+        "images": images,
+    }

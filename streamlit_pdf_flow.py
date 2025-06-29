@@ -4,7 +4,7 @@ from tempfile import NamedTemporaryFile
 from jinja2 import Environment, FileSystemLoader
 from xhtml2pdf import pisa
 from pathlib import Path
-from parser.text_extractor import extract_text_from_pdf, extract_question_images
+from parser.text_extractor import extract_pdf_data
 from parser.structured_parser import parse_passage_and_questions
 
 # PDF 렌더링용 함수 (메모리 기반 처리)
@@ -32,8 +32,11 @@ if pdf_file and st.button("1️⃣ 텍스트 추출 및 파싱"):
     tmp.write(pdf_file.read())
     tmp.flush()
 
-    raw_text = extract_text_from_pdf(tmp.name)
-    img_results = extract_question_images(tmp.name, "./data/question_images")
+    result = extract_pdf_data(tmp.name, "./data/question_images")
+    raw_text = result["text"]
+    img_results = result["images"]
+    passages = result["passages"]
+    # 첫 번째 지문 기준으로 파싱
     passage, questions = parse_passage_and_questions(raw_text)
     st.info("문항 이미지는 ./data/question_images 폴더에 저장됩니다.")
     st.json(img_results)
@@ -42,7 +45,7 @@ if pdf_file and st.button("1️⃣ 텍스트 추출 및 파싱"):
 
     st.session_state.parsed_data = {
         "title": title,
-        "paragraphs": [passage.content],
+        "paragraphs": [passages[0] if passages else passage.content],
         "questions": [
             {"question": q.stem, "choices": q.choices or [], "answer": q.answer or ""}
             for q in questions if q.metadata.type == "multiple_choice"
