@@ -1,83 +1,215 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>{{ title }}</title>
-  <style>
-    body {
-      font-family: 'Noto Sans KR', sans-serif;
-      margin: 50px 60px;
-      padding: 0;
-      font-size: 15px;
-      line-height: 1.9;
-      color: #fff;
-      background-color: #000;
-    }
-    h1 {
-      text-align: center;
-      font-size: 20px;
-      margin-bottom: 40px;
-    }
-    .content {
-      column-count: 2;
-      column-gap: 60px;
-    }
-    .paragraph-box {
-      border: 1px solid #888;
-      padding: 20px;
-      margin-bottom: 40px;
-      break-inside: avoid;
-      background-color: #111;
-    }
-    .paragraph {
-      margin: 0;
-      text-align: justify;
-    }
-    .question-block {
-      break-inside: avoid;
-      margin-bottom: 30px;
-      text-align: justify;
-    }
-    .question-block strong {
-      font-weight: bold;
-      display: inline-block;
-      margin-bottom: 5px;
-    }
-    .choice {
-      display: block;
-      text-indent: -1.5em;
-      padding-left: 1.5em;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.8;
+            color: #333;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #2c3e50;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin: 0;
+            color: #2c3e50;
+        }
+        
+        .set-container {
+            margin-bottom: 60px;
+            page-break-after: always;
+        }
+        
+        .set-container:last-child {
+            page-break-after: avoid;
+        }
+        
+        .passage-section {
+            background-color: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            border-left: 5px solid #3498db;
+        }
+        
+        .passage-header {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .passage-header::before {
+            content: "📖";
+            margin-right: 10px;
+            font-size: 20px;
+        }
+        
+        .passage-content {
+            font-size: 14px;
+            line-height: 2;
+            text-align: justify;
+            white-space: pre-wrap;
+        }
+        
+        .questions-section {
+            margin-top: 30px;
+        }
+        
+        .question-item {
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        
+        .question-number {
+            font-weight: bold;
+            color: #e74c3c;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        
+        .question-text {
+            font-size: 14px;
+            margin-bottom: 15px;
+            line-height: 1.8;
+        }
+        
+        .choices {
+            margin-left: 20px;
+        }
+        
+        .choice-item {
+            margin-bottom: 8px;
+            font-size: 14px;
+            display: flex;
+            align-items: flex-start;
+        }
+        
+        .choice-number {
+            font-weight: bold;
+            margin-right: 10px;
+            color: #3498db;
+            min-width: 25px;
+        }
+        
+        .ox-question {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .subjective-question {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+        }
+        
+        .answer-space {
+            margin-top: 15px;
+            border: 1px dashed #999;
+            height: 80px;
+            background-color: #fafafa;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        
+        .page-number {
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+            margin-top: 30px;
+        }
+        
+        .set-divider {
+            text-align: center;
+            margin: 40px 0;
+            font-size: 18px;
+            color: #7f8c8d;
+        }
+        
+        @media print {
+            .set-container {
+                page-break-after: always;
+            }
+            
+            .question-item {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
 </head>
 <body>
-  <h1>{{ title }}</h1>
-  <div class="content">
-    {% for para in paragraphs %}
-      <div class="paragraph-box">
-        <div class="paragraph">
-          {{ para.replace('\n', '<br>')|safe }}
+    <div class="header">
+        <h1>{{ title }}</h1>
+    </div>
+    
+    {% for set in sets %}
+    <div class="set-container">
+        <div class="set-divider">{{ set.question_range }}</div>
+        
+        <div class="passage-section">
+            <div class="passage-header">다음 글을 읽고 물음에 답하시오.</div>
+            <div class="passage-content">{{ set.passage }}</div>
         </div>
-      </div>
+        
+        <div class="questions-section">
+            {% for question in set.questions %}
+            <div class="question-item 
+                {% if question.type == 'ox' %}ox-question{% endif %}
+                {% if question.type == 'subjective' %}subjective-question{% endif %}">
+                
+                <div class="question-number">{{ question.number }}.</div>
+                <div class="question-text">{{ question.text }}</div>
+                
+                {% if question.type == 'multiple_choice' and question.choices %}
+                <div class="choices">
+                    {% for choice in question.choices %}
+                    <div class="choice-item">
+                        <span class="choice-number">{{ ['①', '②', '③', '④', '⑤'][loop.index0] }}</span>
+                        <span>{{ choice }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                {% if question.type == 'subjective' %}
+                <div class="answer-space">
+                    <small style="color: #999;">답안 작성 공간</small>
+                </div>
+                {% endif %}
+                
+                {% if question.type == 'ox' %}
+                <div class="choices">
+                    <div class="choice-item">
+                        <span class="choice-number">O</span>
+                        <span>맞다</span>
+                    </div>
+                    <div class="choice-item">
+                        <span class="choice-number">X</span>
+                        <span>틀리다</span>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="page-number">- {{ loop.index }} -</div>
+    </div>
     {% endfor %}
-
-    {% for q in questions %}
-      <div class="question-block">
-        {% set lines = q.question.split('\n') %}
-        {% if lines|length > 1 %}
-          <strong>{{ lines[0] }}</strong>
-          {% for line in lines[1:] %}
-            {% if line.strip().startswith('①') or line.strip().startswith('②') or line.strip().startswith('③') or line.strip().startswith('④') or line.strip().startswith('⑤') %}
-              <span class="choice">{{ line }}</span>
-            {% else %}
-              <p>{{ line }}</p>
-            {% endif %}
-          {% endfor %}
-        {% else %}
-          <p>{{ q.question }}</p>
-        {% endif %}
-      </div>
-    {% endfor %}
-  </div>
 </body>
 </html>
