@@ -308,70 +308,159 @@ def extract_question_image(pdf_path: str, question: Question, output_dir: str) -
     image_output_dir = os.path.join(output_dir, "images")
     os.makedirs(image_output_dir, exist_ok=True)
 
-    # 문제 본문의 첫 줄로 검색하여 시작 위치 찾기
-    # 문제 번호와 본문 시작 부분을 함께 검색하여 정확도 높임
-    search_start_text = f"{question.question_number}. {question.stem.splitlines()[0].strip()}"
-    if not search_start_text: 
+    all_blocks = get_content_blocks_with_coords(pdf_path)
+
+    start_block_found = False
+    question_blocks = []
+    target_page = None
+    target_col = None
+
+    for i, block in enumerate(all_blocks):
+        block_text = block["text"]
+        block_page = block["page"]
+        block_col = block["col"]
+
+        # Find the starting block of the question
+        # Check if the block text starts with the question number and contains part of the stem
+        # Using a more flexible check for stem as it might be split across blocks
+        if not start_block_found:
+            # Ensure question.stem is not empty before trying to split
+            stem_first_line = question.stem.splitlines()[0].strip() if question.stem else ""
+            if str(question.question_number) in block_text and stem_first_line in block_text:
+                start_block_found = True
+                target_page = block_page
+                target_col = block_col
+                question_blocks.append(block)
+                continue
+        
+        # Once the start block is found, collect subsequent blocks that belong to the same question
+        if start_block_found:
+            # Stop if it's a new page or a different column
+            if block_page != target_page or block_col != target_col:
+                break
+            
+            # Stop if it's a new question or a passage start
+            if is_question_start(block_text) and get_question_number(block_text) != question.question_number:
+                break
+            if is_passage_start_enhanced(block_text)[0]:
+                break
+            
+            question_blocks.append(block)
+
+    if not question_blocks:
         doc.close()
         return None
 
-    # 5번 선택지 텍스트로 끝 위치 찾기
-    search_end_text = None
-    if question.choices and len(question.choices) >= 5:
-        search_end_text = question.choices[4].strip() # 5번 선택지
-    elif question.choices and len(question.choices) > 0: # 5번 선택지가 없으면 마지막 선택지
-        search_end_text = question.choices[-1].strip()
-    
-    # 선택지가 없으면 문제 본문 전체를 영역으로
-    if not search_end_text:
-        search_end_text = question.stem.splitlines()[-1].strip()
+    # Calculate the combined bounding box for all collected question blocks
+    min_x = float('inf')
+    min_y = float('inf')
+    max_x = float('-inf')
+    max_y = float('-inf')
 
-    start_rect = None
-    end_rect = None
-    target_page = None
-    column_rect = None # 문제를 포함하는 열의 영역
+    for block in question_blocks:
+        bbox = fitz.Rect(block["bbox"])
+        min_x = min(min_x, bbox.x0)
+        min_y = min(min_y, bbox.y0)
+        max_x = max(max_x, bbox.x1)
+        max_y = max(max_y, bbox.y1)
 
-    for page_num in range(doc.page_count):
-        page = doc[page_num]
-        width, height = page.rect.width, page.rect.height
-        
-        # 시작 텍스트 검색
-        start_instances = page.search_for(search_start_text)
-        if start_instances:
-            start_rect = start_instances[0]
-            target_page = page
-            
-            # 텍스트의 x좌표를 기준으로 어느 열에 있는지 판단
-            if start_rect.x0 < width / 2: # 좌측 열
-                column_rect = fitz.Rect(0, 0, width / 2, height)
-            else: # 우측 열
-                column_rect = fitz.Rect(width / 2, 0, width, height)
-            
-            # 끝 텍스트 검색 (동일 페이지 및 동일 열 내에서)
-            if search_end_text:
-                end_instances = page.search_for(search_end_text, clip=column_rect)
-                if end_instances:
-                    end_rect = end_instances[-1] # 마지막 일치하는 영역 사용
-                    break # 시작과 끝을 같은 페이지에서 찾았으므로 종료
-            else:
-                # 끝 텍스트가 없으면 시작 텍스트만으로 영역 설정
-                end_rect = start_rect
-                break
-    
-    if start_rect and end_rect and target_page and column_rect:
-        combined_bbox = fitz.Rect(start_rect)
-        combined_bbox.include_rect(end_rect)
+    combined_bbox = fitz.Rect(min_x, min_y, max_x, max_y)
 
-        # 최종 BBox를 해당 열의 너비로 확장하고 상하 여백 추가
-        combined_bbox.x0 = column_rect.x0 # 열의 시작 x좌표
-        combined_bbox.x1 = column_rect.x1 # 열의 끝 x좌표
-        combined_bbox.y0 = max(0, combined_bbox.y0 - 10) # 상단 여백 추가
-        combined_bbox.y1 = min(target_page.rect.height, combined_bbox.y1 + 10) # 하단 여백 추가
+    # Add padding
+    padding = 10
+    combined_bbox.x0 = max(0, combined_bbox.x0 - padding)
+    combined_bbox.y0 = max(0, combined_bbox.y0 - padding)
+    combined_bbox.x1 = min(doc[target_page].rect.width, combined_bbox.x1 + padding)
+    combined_bbox.y1 = min(doc[target_page].rect.height, combined_bbox.y1 + padding)
 
-        img_filename = f"question_{question.passage_id}_{question.question_number}.png"
-        image_path = save_region_as_image(target_page, combined_bbox, image_output_dir, img_filename)
-        doc.close()
-        return image_path
-    
+    img_filename = f"question_{question.passage_id}_{question.question_number}.png"
+    image_path = save_region_as_image(doc[target_page], combined_bbox, image_output_dir, img_filename)
     doc.close()
-    return None
+    return image_path
+
+def extract_passage_image(pdf_path: str, passage: Passage, output_dir: str) -> Optional[str]:
+    """
+    주어진 Passage 객체의 텍스트를 PDF에서 찾아 해당 영역의 이미지를 추출합니다.
+    지문 시작부터 끝까지를 영역으로 정합니다.
+
+    Args:
+        pdf_path (str): 원본 PDF 파일 경로.
+        passage (Passage): 이미지 추출 대상 Passage 객체.
+        output_dir (str): 이미지를 저장할 기본 출력 디렉토리.
+
+    Returns:
+        Optional[str]: 추출된 이미지 파일 경로. 실패 시 None.
+    """
+    doc = fitz.open(pdf_path)
+    image_output_dir = os.path.join(output_dir, "images")
+    os.makedirs(image_output_dir, exist_ok=True)
+
+    all_blocks = get_content_blocks_with_coords(pdf_path)
+
+    start_block_found = False
+    passage_blocks = []
+    target_page = None
+    target_col = None
+
+    # Find the starting block of the passage
+    search_start_text = passage.instruction.splitlines()[0].strip() if passage.instruction else passage.content.splitlines()[0].strip()
+    if not search_start_text:
+        doc.close()
+        return None
+
+    for i, block in enumerate(all_blocks):
+        block_text = block["text"]
+        block_page = block["page"]
+        block_col = block["col"]
+
+        if not start_block_found:
+            if search_start_text in block_text:
+                start_block_found = True
+                target_page = block_page
+                target_col = block_col
+                passage_blocks.append(block)
+                continue
+        
+        if start_block_found:
+            # Stop if it's a new page or a different column
+            if block_page != target_page or block_col != target_col:
+                break
+            
+            # Stop if it's a new question or a new passage start
+            if is_question_start(block_text):
+                break
+            if is_passage_start_enhanced(block_text)[0] and block_text != search_start_text:
+                break
+            
+            passage_blocks.append(block)
+
+    if not passage_blocks:
+        doc.close()
+        return None
+
+    # Calculate the combined bounding box for all collected passage blocks
+    min_x = float('inf')
+    min_y = float('inf')
+    max_x = float('-inf')
+    max_y = float('-inf')
+
+    for block in passage_blocks:
+        bbox = fitz.Rect(block["bbox"])
+        min_x = min(min_x, bbox.x0)
+        min_y = min(min_y, bbox.y0)
+        max_x = max(max_x, bbox.x1)
+        max_y = max(max_y, bbox.y1)
+
+    combined_bbox = fitz.Rect(min_x, min_y, max_x, max_y)
+
+    # Add padding
+    padding = 10
+    combined_bbox.x0 = max(0, combined_bbox.x0 - padding)
+    combined_bbox.y0 = max(0, combined_bbox.y0 - padding)
+    combined_bbox.x1 = min(doc[target_page].rect.width, combined_bbox.x1 + padding)
+    combined_bbox.y1 = min(doc[target_page].rect.height, combined_bbox.y1 + padding)
+
+    img_filename = f"passage_{passage.passage_id}.png"
+    image_path = save_region_as_image(doc[target_page], combined_bbox, image_output_dir, img_filename)
+    doc.close()
+    return image_path

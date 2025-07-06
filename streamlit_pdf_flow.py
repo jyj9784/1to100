@@ -6,7 +6,7 @@ from tempfile import NamedTemporaryFile
 from jinja2 import Environment, FileSystemLoader
 from xhtml2pdf import pisa
 from pathlib import Path
-from parser.structured_parser import parse_all_passages_and_questions, extract_question_image
+from parser.structured_parser import parse_all_passages_and_questions, extract_question_image, extract_passage_image
 from parser.text_extractor import extract_text_from_pdf
 
 st.set_page_config(layout="wide")
@@ -31,6 +31,10 @@ if pdf_file and st.button("🔍 지문-문제 및 이미지 추출하기"):
         output_dir = os.path.join("data", "output", title)
         for q in questions:
             q.image_path = extract_question_image(tmp.name, q, output_dir)
+        
+        # 3단계: 지문 이미지 추출 및 연결
+        for p in passages:
+            p.image_path = extract_passage_image(tmp.name, p, output_dir)
 
         sets = []
         for i, p in enumerate(passages):
@@ -72,8 +76,11 @@ if "extracted_data" in st.session_state:
                     key=f"passage_{i}"
                 )
             with col2:
-                st.subheader("🖼️ 지문 이미지 (현재 미지원)")
-                st.warning("지문 이미지 추출은 현재 지원되지 않습니다.")
+                st.subheader("🖼️ 지문 이미지")
+                if passage_info.get('image_path') and os.path.exists(passage_info['image_path']):
+                    st.image(passage_info['image_path'], use_container_width=True)
+                else:
+                    st.warning("지문 이미지를 찾을 수 없습니다.")
             
             st.markdown("<hr>", unsafe_allow_html=True)
             st.subheader("❓ 문제")
