@@ -182,13 +182,11 @@ def create_question_from_block(block_lines: List[str], passage_id: str, question
     choices = extract_choices(full_text)
     
     # 문제 본문(stem) 추출: 전체 텍스트에서 선택지 부분을 제외한 나머지
-    stem_end_index = -1
-    if choices:
-        first_choice_start = full_text.find(choices[0])
-        if first_choice_start != -1:
-            stem_end_index = first_choice_start
+    stem = full_text
+    match = re.search(r"①|②|③|④|⑤", stem)
+    if match:
+        stem = stem[:match.start()].strip()
     
-    stem = full_text[:stem_end_index].strip() if stem_end_index != -1 else full_text
     # 문제 본문에서 문제 번호 텍스트(e.g., "1.") 제거
     stem = re.sub(r"^\d+\s*[.)]\s*", "", stem).strip()
 
