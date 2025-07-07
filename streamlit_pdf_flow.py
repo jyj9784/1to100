@@ -6,7 +6,7 @@ from tempfile import NamedTemporaryFile
 from jinja2 import Environment, FileSystemLoader
 from xhtml2pdf import pisa
 from pathlib import Path
-from parser.structured_parser import parse_all_passages_and_questions, extract_question_image, extract_passage_image
+from parser.structured_parser import parse_all_passages_and_questions, extract_question_image, extract_passage_image, extract_choices_image
 from parser.text_extractor import extract_text_from_pdf
 
 st.set_page_config(layout="wide")
@@ -27,10 +27,11 @@ if pdf_file and st.button("🔍 지문-문제 및 이미지 추출하기"):
         raw_text = extract_text_from_pdf(tmp.name)
         passages, questions = parse_all_passages_and_questions(raw_text)
 
-        # 2단계: 문제 이미지 추출 및 연결
+        # 2단계: 문제 및 선택지 이미지 추출 및 연결
         output_dir = os.path.join("data", "output", title)
         for q in questions:
             q.image_path = extract_question_image(tmp.name, q, output_dir)
+            q.choices_image_path = extract_choices_image(tmp.name, q, output_dir)
         
         # 3단계: 지문 이미지 추출 및 연결
         for p in passages:
@@ -87,27 +88,39 @@ if "extracted_data" in st.session_state:
             
             for q_idx, q in enumerate(set_data['questions']):
                 st.markdown(f"**문제 {q['question_number']}**")
-                q_col1, q_col2 = st.columns(2)
-                with q_col1:
+                
+                # 문제 본문 (텍스트 + 이미지)
+                st.subheader("문제 본문")
+                q_stem_col1, q_stem_col2 = st.columns(2)
+                with q_stem_col1:
                     q['stem'] = st.text_area(
                         f"문제 {q['question_number']} 내용",
                         value=q['stem'],
                         height=250,
                         key=f"q_stem_{i}_{q_idx}"
                     )
-                    if q['choices']:
-                        st.write("**선택지:**")
+                with q_stem_col2:
+                    if q.get('image_path') and os.path.exists(q['image_path']):
+                        st.image(q['image_path'], use_container_width=True)
+                    else:
+                        st.warning("문제 이미지를 찾을 수 없습니다.")
+                
+                # 선택지 (텍스트 + 이미지)
+                if q['choices']:
+                    st.subheader("선택지")
+                    q_choices_col1, q_choices_col2 = st.columns(2)
+                    with q_choices_col1:
                         for c_idx, choice in enumerate(q['choices']):
                             q['choices'][c_idx] = st.text_input(
                                 f"선택지 {c_idx + 1}",
                                 value=choice,
                                 key=f"choice_{i}_{q_idx}_{c_idx}"
                             )
-                with q_col2:
-                    if q.get('image_path') and os.path.exists(q['image_path']):
-                        st.image(q['image_path'], use_container_width=True)
-                    else:
-                        st.warning("문제 이미지를 찾을 수 없습니다.")
+                    with q_choices_col2:
+                        if q.get('choices_image_path') and os.path.exists(q['choices_image_path']):
+                            st.image(q['choices_image_path'], use_container_width=True)
+                        else:
+                            st.warning("선택지 이미지를 찾을 수 없습니다.")
                 st.markdown("<br>", unsafe_allow_html=True)
 
     if st.button("💾 변경사항 저장 (JSON)"):

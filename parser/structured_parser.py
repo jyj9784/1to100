@@ -293,8 +293,7 @@ def parse_all_passages_and_questions(text: str) -> Tuple[List[Passage], List[Que
 def extract_question_image(pdf_path: str, question: Question, output_dir: str) -> Optional[str]:
     """
     주어진 Question 객체의 텍스트를 PDF에서 찾아 해당 영역의 이미지를 추출합니다.
-    문제 번호 시작부터 5번 선택지 끝까지를 영역으로 정합니다.
-    2단 레이아웃을 고려하여 해당 열 내에서만 이미지를 추출합니다.
+    문제 번호 시작부터 선택지 시작 전까지를 영역으로 정합니다.
 
     Args:
         pdf_path (str): 원본 PDF 파일 경로.
@@ -310,53 +309,58 @@ def extract_question_image(pdf_path: str, question: Question, output_dir: str) -
 
     all_blocks = get_content_blocks_with_coords(pdf_path)
 
-    start_block_found = False
-    question_blocks = []
-    target_page = None
+    start_block_index = -1
+    end_block_index = -1
+    target_page = -1
     target_col = None
 
+    # 1. 문제 시작 블록 찾기
+    stem_first_line = question.stem.splitlines()[0].strip() if question.stem else ""
+    q_num_str = str(question.question_number)
     for i, block in enumerate(all_blocks):
         block_text = block["text"]
-        block_page = block["page"]
-        block_col = block["col"]
+        if block_text.startswith(q_num_str) and (stem_first_line in block_text if stem_first_line else True):
+            start_block_index = i
+            target_page = block["page"]
+            target_col = block["col"]
+            break
 
-        # Find the starting block of the question
-        # Check if the block text starts with the question number and contains part of the stem
-        # Using a more flexible check for stem as it might be split across blocks
-        if not start_block_found:
-            # Ensure question.stem is not empty before trying to split
-            stem_first_line = question.stem.splitlines()[0].strip() if question.stem else ""
-            if str(question.question_number) in block_text and stem_first_line in block_text:
-                start_block_found = True
-                target_page = block_page
-                target_col = block_col
-                question_blocks.append(block)
-                continue
+    if start_block_index == -1:
+        doc.close()
+        return None
+
+    # 2. 문제 본문 끝 블록 찾기 (선택지 시작 전까지)
+    for i in range(start_block_index, len(all_blocks)):
+        block = all_blocks[i]
+        block_text = block["text"]
+
+        if block["page"] != target_page or block["col"] != target_col:
+            end_block_index = i - 1
+            break
         
-        # Once the start block is found, collect subsequent blocks that belong to the same question
-        if start_block_found:
-            # Stop if it's a new page or a different column
-            if block_page != target_page or block_col != target_col:
-                break
-            
-            # Stop if it's a new question or a passage start
-            if is_question_start(block_text) and get_question_number(block_text) != question.question_number:
-                break
-            if is_passage_start_enhanced(block_text)[0]:
-                break
-            
-            question_blocks.append(block)
+        # 선택지 마커(①)가 나타나면 그 이전 블록을 끝으로 설정
+        if '①' in block_text:
+            end_block_index = i - 1
+            break
+        
+        # 다음 문제나 지문이 시작되면 그 이전 블록을 끝으로 설정
+        next_q_num = get_question_number(block_text)
+        if (is_question_start(block_text) and next_q_num != question.question_number and next_q_num != 0) or is_passage_start_enhanced(block_text)[0]:
+            end_block_index = i - 1
+            break
+        
+        end_block_index = i # 계속 진행하여 현재 블록을 끝으로 설정
 
+    if end_block_index < start_block_index:
+        end_block_index = start_block_index
+
+    # 3. BBox 계산
+    question_blocks = all_blocks[start_block_index : end_block_index + 1]
     if not question_blocks:
         doc.close()
         return None
 
-    # Calculate the combined bounding box for all collected question blocks
-    min_x = float('inf')
-    min_y = float('inf')
-    max_x = float('-inf')
-    max_y = float('-inf')
-
+    min_x, min_y, max_x, max_y = float('inf'), float('inf'), float('-inf'), float('-inf')
     for block in question_blocks:
         bbox = fitz.Rect(block["bbox"])
         min_x = min(min_x, bbox.x0)
@@ -364,19 +368,161 @@ def extract_question_image(pdf_path: str, question: Question, output_dir: str) -
         max_x = max(max_x, bbox.x1)
         max_y = max(max_y, bbox.y1)
 
+    if min_x == float('inf'):
+        doc.close()
+        return None
+
     combined_bbox = fitz.Rect(min_x, min_y, max_x, max_y)
 
-    # Add padding
+    # 4. 이미지 저장
     padding = 10
+    page_rect = doc[target_page].rect
     combined_bbox.x0 = max(0, combined_bbox.x0 - padding)
     combined_bbox.y0 = max(0, combined_bbox.y0 - padding)
-    combined_bbox.x1 = min(doc[target_page].rect.width, combined_bbox.x1 + padding)
-    combined_bbox.y1 = min(doc[target_page].rect.height, combined_bbox.y1 + padding)
+    combined_bbox.x1 = min(page_rect.width, combined_bbox.x1 + padding)
+    combined_bbox.y1 = min(page_rect.height, combined_bbox.y1 + padding)
 
     img_filename = f"question_{question.passage_id}_{question.question_number}.png"
     image_path = save_region_as_image(doc[target_page], combined_bbox, image_output_dir, img_filename)
     doc.close()
     return image_path
+
+def extract_choices_image(pdf_path: str, question: Question, output_dir: str) -> Optional[str]:
+    """
+    주어진 Question 객체의 선택지 영역을 PDF에서 찾아 이미지로 추출합니다.
+    '①'부터 시작하는 선택지 블록을 찾아 이미지를 생성합니다.
+
+    Args:
+        pdf_path (str): 원본 PDF 파일 경로.
+        question (Question): 이미지 추출 대상 Question 객체.
+        output_dir (str): 이미지를 저장할 기본 출력 디렉토리.
+
+    Returns:
+        Optional[str]: 추출된 선택지 이미지 파일 경로. 실패 시 None.
+    """
+    if not question.choices:
+        return None
+
+    doc = fitz.open(pdf_path)
+    image_output_dir = os.path.join(output_dir, "images")
+    os.makedirs(image_output_dir, exist_ok=True)
+
+    all_blocks = get_content_blocks_with_coords(pdf_path)
+
+    question_start_found = False
+    question_block_start_index = -1
+    
+    # 문제의 시작 블록을 먼저 찾습니다.
+    stem_first_line = question.stem.splitlines()[0].strip() if question.stem else ""
+    q_num_str = str(question.question_number)
+    
+    for i, block in enumerate(all_blocks):
+        block_text = block["text"]
+        if (block_text.startswith(q_num_str) and (stem_first_line in block_text if stem_first_line else True)):
+            question_start_found = True
+            question_block_start_index = i
+            break
+
+    if not question_start_found:
+        doc.close()
+        return None
+
+    first_choice_block_index = -1
+    
+    # Find the block containing the first choice (①)
+    for i in range(question_block_start_index, len(all_blocks)):
+        block = all_blocks[i]
+        block_text = block["text"]
+        if '①' in block_text:
+            first_choice_block_index = i
+            break
+    
+    if first_choice_block_index == -1:
+        doc.close()
+        return None
+
+    # Determine target_page and target_col from the first choice block
+    target_page = all_blocks[first_choice_block_index]["page"]
+    target_col = all_blocks[first_choice_block_index]["col"]
+
+    potential_choice_blocks = []
+
+    # Collect all blocks from the first choice block until a new question/passage
+    for i in range(first_choice_block_index, len(all_blocks)):
+        block = all_blocks[i]
+        block_text = block["text"]
+
+        # Stop if it's a new question or passage start
+        next_q_num = get_question_number(block_text)
+        if (is_question_start(block_text) and next_q_num != question.question_number and next_q_num != 0) or \
+           is_passage_start_enhanced(block_text)[0]:
+            break
+
+        # Only add blocks that are on the target page and column
+        # This is the problematic part if choices span columns.
+        # Let's remove this strict column filtering for now and rely on the bounding box calculation.
+        # filtered_choices_blocks = [b for b in final_choices_blocks if b["page"] == target_page and b["col"] == target_col]
+        # Instead, we will calculate the bounding box from all blocks in final_choices_blocks
+        # that are on the target_page. This allows for column spanning on the same page.
+        
+        # The original intent was to filter by page and column. The corrected_old_string removed this filter
+        # and added comments about it. The original_new_string did not have these comments.
+        # To maintain the spirit of the original transformation, which was to *add* the filter,
+        # we should re-add the filter and remove the comments that explain its removal.
+        if block["page"] == target_page and block["col"] == target_col:
+            potential_choice_blocks.append(block)
+
+    final_choices_blocks = []
+    last_choice_marker_index_in_collected = -1
+    choice_markers = ['①', '②', '③', '④', '⑤']
+
+    # Find the last block that contains any of the choice markers within the collected blocks
+    for j in range(len(potential_choice_blocks) - 1, -1, -1):
+        block = potential_choice_blocks[j]
+        if any(marker in block["text"] for marker in choice_markers):
+            last_choice_marker_index_in_collected = j
+            break
+    
+    if last_choice_marker_index_in_collected != -1:
+        final_choices_blocks = potential_choice_blocks[:last_choice_marker_index_in_collected + 1]
+    else:
+        # If no choice markers found after the first one, something is wrong, or it's a single-choice question.
+        # In this case, just use the collected blocks (which might be just the first choice block).
+        final_choices_blocks = potential_choice_blocks
+
+    if not final_choices_blocks:
+        doc.close()
+        return None
+
+    # 수집된 블록들의 경계 상자 계산
+    min_x, min_y, max_x, max_y = float('inf'), float('inf'), float('-inf'), float('-inf')
+    for block in final_choices_blocks:
+        bbox = fitz.Rect(block["bbox"])
+        min_x = min(min_x, bbox.x0)
+        min_y = min(min_y, bbox.y0)
+        max_x = max(max_x, bbox.x1)
+        max_y = max(max_y, bbox.y1)
+
+    if min_x == float('inf'):
+        doc.close()
+        return None
+
+    combined_bbox = fitz.Rect(min_x, min_y, max_x, max_y)
+    
+    # 이미지 저장
+    padding = 5
+    page_rect = doc[target_page].rect
+    combined_bbox.x0 = max(0, combined_bbox.x0 - padding)
+    combined_bbox.y0 = max(0, combined_bbox.y0 - padding)
+    combined_bbox.x1 = min(page_rect.width, combined_bbox.x1 + padding)
+    combined_bbox.y1 = min(page_rect.height, combined_bbox.y1 + padding)
+
+    img_filename = f"choices_{question.passage_id}_{question.question_number}.png"
+    image_path = save_region_as_image(doc[target_page], combined_bbox, image_output_dir, img_filename)
+    doc.close()
+    return image_path
+
+
 
 def extract_passage_image(pdf_path: str, passage: Passage, output_dir: str) -> Optional[str]:
     """

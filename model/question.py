@@ -14,37 +14,24 @@ class Metadata:
         }
 
 class Question:
-    def __init__(
-        self,
-        stem: str,
-        answer: Union[int, str, None],
-        choices: Optional[List[str]] = None,
-        explanation: Optional[str] = None,
-        conditions: Optional[str] = None,
-        metadata: Optional[Metadata] = None,
-        passage_id: str = None,
-        question_number: int = None,
-        image_path: str = None
-    ):
+    def __init__(self, stem: str, metadata: Metadata, passage_id: str, question_number: int, choices: Optional[List[str]] = None, answer: Optional[str] = None, image_path: Optional[str] = None, choices_image_path: Optional[str] = None):
         self.stem = stem
         self.choices = choices
         self.answer = answer
-        self.explanation = explanation
-        self.conditions = conditions
-        self.metadata = metadata or Metadata(type="etc", difficulty="중", points=None)
+        self.metadata = metadata
         self.passage_id = passage_id
         self.question_number = question_number
         self.image_path = image_path
+        self.choices_image_path = choices_image_path
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "stem": self.stem,
             "choices": self.choices,
             "answer": self.answer,
-            "explanation": self.explanation,
-            "conditions": self.conditions,
             "metadata": self.metadata.to_dict(),
             "passage_id": self.passage_id,
             "question_number": self.question_number,
-            "image_path": self.image_path
+            "image_path": self.image_path,
+            "choices_image_path": self.choices_image_path
         }
