@@ -524,10 +524,10 @@ def extract_choices_image(pdf_path: str, question: Question, output_dir: str) ->
 
 
 
-def extract_passage_image(pdf_path: str, passage: Passage, output_dir: str) -> Optional[str]:
+def extract_passage_image(pdf_path: str, passage: Passage, output_dir: str) -> List[str]:
     """
-    주어진 Passage 객체의 텍스트를 PDF에서 찾아 해당 영역의 이미지를 추출합니다.
-    지문 시작부터 끝까지를 영역으로 정합니다.
+    주어진 Passage 객체의 '내용(content)'과 '단어 일치율'을 기반으로 PDF에서 텍스트 블록을 정교하게 찾아 이미지로 추출합니다.
+    일치율이 낮은 관련 없는 블록을 제외하여, 크고 불필요한 쓰레기 이미지가 생성되는 것을 방지합니다.
 
     Args:
         pdf_path (str): 원본 PDF 파일 경로.
@@ -535,78 +535,106 @@ def extract_passage_image(pdf_path: str, passage: Passage, output_dir: str) -> O
         output_dir (str): 이미지를 저장할 기본 출력 디렉토리.
 
     Returns:
-        Optional[str]: 추출된 이미지 파일 경로. 실패 시 None.
+        List[str]: 추출된 모든 이미지 파일 경로의 리스트.
     """
     doc = fitz.open(pdf_path)
     image_output_dir = os.path.join(output_dir, "images")
     os.makedirs(image_output_dir, exist_ok=True)
-
     all_blocks = get_content_blocks_with_coords(pdf_path)
+    image_paths = []
 
-    start_block_found = False
-    passage_blocks = []
-    target_page = None
-    target_col = None
+    # 1. '정답' 단어 집합 준비
+    ground_truth_text = (passage.instruction or "") + " " + (passage.content or "")
+    # 특수문자 제거 및 소문자 변환으로 정규화
+    normalized_text = re.sub(r'[^\w\s]', '', ground_truth_text.lower())
+    truth_words = set(normalized_text.split())
 
-    # Find the starting block of the passage
-    search_start_text = passage.instruction.splitlines()[0].strip() if passage.instruction else passage.content.splitlines()[0].strip()
-    if not search_start_text:
+    if not truth_words:
         doc.close()
-        return None
+        return []
 
-    for i, block in enumerate(all_blocks):
+    # 2. '단어 일치율' 기반으로 PDF의 텍스트 블록 수집
+    passage_blocks = []
+    MATCH_RATIO_THRESHOLD = 0.5  # 일치율 기준 (50%)
+
+    for block in all_blocks:
         block_text = block["text"]
-        block_page = block["page"]
-        block_col = block["col"]
+        if not block_text.strip():
+            continue
 
-        if not start_block_found:
-            if search_start_text in block_text:
-                start_block_found = True
-                target_page = block_page
-                target_col = block_col
-                passage_blocks.append(block)
-                continue
+        # 블록 텍스트도 동일하게 정규화
+        normalized_block_text = re.sub(r'[^\w\s]', '', block_text.lower())
+        block_words = set(normalized_block_text.split())
         
-        if start_block_found:
-            # Stop if it's a new page or a different column
-            if block_page != target_page or block_col != target_col:
-                break
-            
-            # Stop if it's a new question or a new passage start
-            if is_question_start(block_text):
-                break
-            if is_passage_start_enhanced(block_text)[0] and block_text != search_start_text:
-                break
-            
+        if not block_words:
+            continue
+
+        # 일치하는 단어 수 계산
+        matched_words = truth_words.intersection(block_words)
+        match_ratio = len(matched_words) / len(block_words)
+
+        # 일치율이 기준치를 넘고, 문제 시작 부분이 아니면 수집
+        if match_ratio >= MATCH_RATIO_THRESHOLD and not is_question_start(block_text):
             passage_blocks.append(block)
+
+    # 지시문 블록([1~3]...)이 누락되었다면, 따로 찾아서 맨 앞에 추가
+    if passage.instruction:
+        instruction_text_normalized = " ".join(re.sub(r'[^\w\s]', '', passage.instruction.lower()).split())
+        is_instruction_present = any(instruction_text_normalized in " ".join(re.sub(r'[^\w\s]', '', b["text"].lower()).split()) for b in passage_blocks)
+        if not is_instruction_present:
+            for block in all_blocks:
+                if instruction_text_normalized in " ".join(re.sub(r'[^\w\s]', '', block["text"].lower()).split()):
+                    passage_blocks.insert(0, block)
+                    break
 
     if not passage_blocks:
         doc.close()
-        return None
+        return []
 
-    # Calculate the combined bounding box for all collected passage blocks
-    min_x = float('inf')
-    min_y = float('inf')
-    max_x = float('-inf')
-    max_y = float('-inf')
+    # 3. 페이지와 컬럼별로 블록을 그룹화하여 이미지 생성
+    unique_blocks = list({tuple(b['bbox']): b for b in passage_blocks}.values())
 
-    for block in passage_blocks:
-        bbox = fitz.Rect(block["bbox"])
-        min_x = min(min_x, bbox.x0)
-        min_y = min(min_y, bbox.y0)
-        max_x = max(max_x, bbox.x1)
-        max_y = max(max_y, bbox.y1)
+    page_col_groups = {}
+    for block in unique_blocks:
+        group_key = (block["page"], block["col"])
+        if group_key not in page_col_groups:
+            page_col_groups[group_key] = []
+        page_col_groups[group_key].append(block)
 
-    combined_bbox = fitz.Rect(min_x, min_y, max_x, max_y)
+    sorted_groups = sorted(page_col_groups.items(), key=lambda item: (item[0][0], item[0][1]))
 
-    # Add padding
-    padding = 10
-    combined_bbox.x0 = max(0, combined_bbox.x0 - padding)
-    combined_bbox.y0 = max(0, combined_bbox.y0 - padding)
-    combined_bbox.x1 = min(doc[target_page].rect.width, combined_bbox.x1 + padding)
-    combined_bbox.y1 = min(doc[target_page].rect.height, combined_bbox.y1 + padding)
+    for (page_num, col), blocks_in_group in sorted_groups:
+        if not blocks_in_group:
+            continue
 
-    img_filename = f"passage_{passage.passage_id}.png"
-    image_path = save_region_as_image(doc[target_page], combined_bbox, image_output_dir, img_filename)
+        min_x, min_y, max_x, max_y = float('inf'), float('inf'), float('-inf'), float('-inf')
+        for block in blocks_in_group:
+            bbox = fitz.Rect(block["bbox"])
+            min_x = min(min_x, bbox.x0)
+            min_y = min(min_y, bbox.y0)
+            max_x = max(max_x, bbox.x1)
+            max_y = max(max_y, bbox.y1)
+
+        if min_x == float('inf'):
+            continue
+
+        combined_bbox = fitz.Rect(min_x, min_y, max_x, max_y)
+        
+        MIN_AREA_THRESHOLD = 4000
+        if combined_bbox.width * combined_bbox.height < MIN_AREA_THRESHOLD:
+            continue
+
+        page = doc[page_num]
+        padding = 10
+        page_rect = page.rect
+        combined_bbox.x0 = max(0, combined_bbox.x0 - padding)
+        combined_bbox.y0 = max(0, combined_bbox.y0 - padding)
+        combined_bbox.x1 = min(page_rect.width, combined_bbox.x1 + padding)
+        combined_bbox.y1 = min(page_rect.height, combined_bbox.y1 + padding)
+
+        img_filename = f"passage_{passage.passage_id}_p{page_num + 1}_{col}.png"
+        image_path = save_region_as_image(page, combined_bbox, image_output_dir, img_filename)
+        image_paths.append(image_path)
+    
     doc.close()
-    return image_path
+    return image_paths

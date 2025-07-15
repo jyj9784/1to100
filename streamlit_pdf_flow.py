@@ -35,7 +35,7 @@ if pdf_file and st.button("🔍 지문-문제 및 이미지 추출하기"):
         
         # 3단계: 지문 이미지 추출 및 연결
         for p in passages:
-            p.image_path = extract_passage_image(tmp.name, p, output_dir)
+            p.image_paths = extract_passage_image(tmp.name, p, output_dir)
 
         sets = []
         for i, p in enumerate(passages):
@@ -78,8 +78,12 @@ if "extracted_data" in st.session_state:
                 )
             with col2:
                 st.subheader("🖼️ 지문 이미지")
-                if passage_info.get('image_path') and os.path.exists(passage_info['image_path']):
-                    st.image(passage_info['image_path'], use_container_width=True)
+                if passage_info.get('image_paths'):
+                    for img_path in passage_info['image_paths']:
+                        if os.path.exists(img_path):
+                            st.image(img_path, use_container_width=True)
+                        else:
+                            st.warning(f"이미지 파일을 찾을 수 없습니다: {img_path}")
                 else:
                     st.warning("지문 이미지를 찾을 수 없습니다.")
             
